@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: crop_monitoring_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: smart_farming
+      MYSQL_USER: farmer
+      MYSQL_PASSWORD: agriculture_secret_123
+      MYSQL_ROOT_PASSWORD: root_secret_password_123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "farmer", "-pagriculture_secret_123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: crop_monitoring_backend
+    restart: always
+    environment:
+      - DATABASE_URL=mysql+pymysql://farmer:agriculture_secret_123@db/smart_farming
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/static/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: crop_monitoring_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  backend_uploads:

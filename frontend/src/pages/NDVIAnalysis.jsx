@@ -1,0 +1,700 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip as ChartTooltip, 
+  Cell
+} from 'recharts';
+import { 
+  Upload, 
+  ImageIcon, 
+  Sparkles, 
+  AlertTriangle,
+  Download, 
+  Layers, 
+  ArrowRight,
+  Database,
+  RefreshCw,
+  Info,
+  Sliders,
+  FileText
+} from 'lucide-react';
+
+export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
+  const [analysisMode, setAnalysisMode] = useState('single'); // 'single' (GeoTIFF/RGB) or 'dual' (Red + NIR bands)
+  const [selectedPlotId, setSelectedPlotId] = useState('');
+  
+  // Single mode files
+  const [singleFile, setSingleFile] = useState(null);
+  const [singlePreviewUrl, setSinglePreviewUrl] = useState(null);
+
+  // Dual mode files
+  const [redFile, setRedFile] = useState(null);
+  const [redPreviewUrl, setRedPreviewUrl] = useState(null);
+  const [nirFile, setNirFile] = useState(null);
+  const [nirPreviewUrl, setNirPreviewUrl] = useState(null);
+
+  // Status & Telemetry
+  const [analyzing, setAnalyzing] = useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = useState(null);
+  const [analysisHistory, setAnalysisHistory] = useState([]);
+  const [dragActive, setDragActive] = useState({ single: false, red: false, nir: false });
+
+  // Fetch analysis records
+  const fetchHistory = async () => {
+    if (dbStatus.connected) {
+      try {
+        const res = await fetch('/api/analysis');
+        if (res.ok) {
+          const data = await res.json();
+          setAnalysisHistory(data);
+        }
+      } catch (err) {
+        console.error("Failed to load lab history", err);
+      }
+    } else {
+      // Mock history containing histograms in Demo Mode
+      setAnalysisHistory([
+        {
+          id: 1,
+          plot_id: 1,
+          date: new Date().toISOString().split('T')[0],
+          original_image_path: "static/uploads/demo_rice.jpg",
+          processed_heatmap_path: "static/uploads/demo_rice_heatmap.jpg",
+          min_ndvi: 0.12,
+          max_ndvi: 0.88,
+          avg_ndvi: 0.78,
+          health_classification: "Healthy (Dense Canopy)",
+          histogram: [
+            { bin: -0.9, percentage: 0.2 },
+            { bin: -0.7, percentage: 0.1 },
+            { bin: -0.5, percentage: 0.5 },
+            { bin: -0.3, percentage: 1.2 },
+            { bin: -0.1, percentage: 2.5 },
+            { bin: 0.1, percentage: 8.4 },
+            { bin: 0.3, percentage: 15.6 },
+            { bin: 0.5, percentage: 28.2 },
+            { bin: 0.7, percentage: 35.8 },
+            { bin: 0.9, percentage: 7.5 }
+          ]
+        },
+        {
+          id: 2,
+          plot_id: 3,
+          date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+          original_image_path: "static/uploads/demo_cassava.jpg",
+          processed_heatmap_path: "static/uploads/demo_cassava_heatmap.jpg",
+          min_ndvi: -0.05,
+          max_ndvi: 0.62,
+          avg_ndvi: 0.38,
+          health_classification: "Moderate Stress",
+          histogram: [
+            { bin: -0.9, percentage: 1.5 },
+            { bin: -0.7, percentage: 2.2 },
+            { bin: -0.5, percentage: 3.4 },
+            { bin: -0.3, percentage: 6.8 },
+            { bin: -0.1, percentage: 12.5 },
+            { bin: 0.1, percentage: 25.4 },
+            { bin: 0.3, percentage: 32.6 },
+            { bin: 0.5, percentage: 12.2 },
+            { bin: 0.7, percentage: 3.1 },
+            { bin: 0.9, percentage: 0.3 }
+          ]
+        }
+      ]);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, [dbStatus.connected]);
+
+  // Drag & Drop Handler
+  const handleDrag = (e, target) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(prev => ({ ...prev, [target]: true }));
+    } else if (e.type === "dragleave") {
+      setDragActive(prev => ({ ...prev, [target]: false }));
+    }
+  };
+
+  const handleDrop = (e, target) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(prev => ({ ...prev, [target]: false }));
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const fileObj = e.dataTransfer.files[0];
+      const preview = URL.createObjectURL(fileObj);
+      
+      if (target === 'single') {
+        setSingleFile(fileObj);
+        setSinglePreviewUrl(preview);
+      } else if (target === 'red') {
+        setRedFile(fileObj);
+        setRedPreviewUrl(preview);
+      } else if (target === 'nir') {
+        setNirFile(fileObj);
+        setNirPreviewUrl(preview);
+      }
+    }
+  };
+
+  const handleFileChange = (e, target) => {
+    if (e.target.files && e.target.files[0]) {
+      const fileObj = e.target.files[0];
+      const preview = URL.createObjectURL(fileObj);
+      
+      if (target === 'single') {
+        setSingleFile(fileObj);
+        setSinglePreviewUrl(preview);
+      } else if (target === 'red') {
+        setRedFile(fileObj);
+        setRedPreviewUrl(preview);
+      } else if (target === 'nir') {
+        setNirFile(fileObj);
+        setNirPreviewUrl(preview);
+      }
+    }
+  };
+
+  // NDVI calculation trigger
+  const handleCalculateNDVI = async (e) => {
+    e.preventDefault();
+    setAnalyzing(true);
+    setCurrentAnalysis(null);
+
+    if (dbStatus.connected) {
+      try {
+        const formData = new FormData();
+        if (selectedPlotId) formData.append('plot_id', selectedPlotId);
+
+        let response;
+        if (analysisMode === 'single') {
+          if (!singleFile) return;
+          formData.append('image', singleFile);
+          response = await fetch('/api/analysis', {
+            method: 'POST',
+            body: formData
+          });
+        } else {
+          if (!redFile || !nirFile) return;
+          formData.append('red_image', redFile);
+          formData.append('nir_image', nirFile);
+          response = await fetch('/api/analysis/dual', {
+            method: 'POST',
+            body: formData
+          });
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentAnalysis(data);
+          fetchHistory();
+          onRefresh();
+        } else {
+          const err = await response.json();
+          alert(err.detail || "Image spectral analysis failed");
+        }
+      } catch (err) {
+        alert("API connection failure during analysis");
+      } finally {
+        setAnalyzing(false);
+      }
+    } else {
+      // Offline mock calculation
+      setTimeout(() => {
+        const isStressed = Math.random() > 0.5;
+        const avg = isStressed ? 0.31 : 0.74;
+        
+        // Mock 10 bins histogram
+        const mockHistogram = Array.from({ length: 10 }).map((_, i) => {
+          const binCenter = roundToDec((i * 0.2 - 0.9), 1);
+          // Distribute peaks based on stress
+          let pct = 2.0;
+          if (isStressed) {
+            if (binCenter >= 0.1 && binCenter <= 0.4) pct = 32.5;
+            else if (binCenter < 0.1) pct = 15.0;
+          } else {
+            if (binCenter >= 0.5 && binCenter <= 0.8) pct = 38.4;
+            else if (binCenter < 0.5) pct = 4.2;
+          }
+          return { bin: binCenter, percentage: pct };
+        });
+
+        const result = {
+          id: Math.random(),
+          plot_id: selectedPlotId ? Number(selectedPlotId) : null,
+          date: new Date().toISOString().split('T')[0],
+          original_image_path: analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl,
+          processed_heatmap_path: analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl,
+          min_ndvi: isStressed ? -0.12 : 0.18,
+          max_ndvi: isStressed ? 0.54 : 0.94,
+          avg_ndvi: avg,
+          health_classification: isStressed ? "Moderate Stress" : "Healthy (Dense Canopy)",
+          histogram: mockHistogram
+        };
+
+        setCurrentAnalysis(result);
+        setAnalysisHistory(prev => [result, ...prev]);
+        setAnalyzing(false);
+        onRefresh();
+      }, 1500);
+    }
+  };
+
+  const loadPastAnalysis = (past) => {
+    setCurrentAnalysis(past);
+    // Bind original preview path
+    setSinglePreviewUrl(past.original_image_path.startsWith('blob:') ? past.original_image_path : `/${past.original_image_path}`);
+  };
+
+  // Download action
+  const handleDownloadHeatmap = () => {
+    if (!currentAnalysis) return;
+    const path = currentAnalysis.processed_heatmap_path;
+    const downloadUrl = path.startsWith('blob:') ? path : `/${path}`;
+    
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `heatmap_plot_${currentAnalysis.plot_id || 'adhoc'}_${currentAnalysis.date}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const roundToDec = (num, decs) => {
+    return Math.round(num * Math.pow(10, decs)) / Math.pow(10, decs);
+  };
+
+  // Diagnostic Interpretation details
+  const getDiagnosticDetails = (status) => {
+    const s = status.toLowerCase();
+    if (s.includes("severe")) {
+      return {
+        severity: "CRITICAL ALERT",
+        alertColor: "bg-red-500",
+        bg: "bg-red-50 border-red-200 text-red-700",
+        advice: "Severe crop stress detected. Inspect drip lines immediately for blockages, test soil moisture values, and schedule manual pest checks.",
+        colorMap: ['#ef4444', '#f87171']
+      };
+    } else if (s.includes("moderate") || s.includes("stress")) {
+      return {
+        severity: "MILD STRESS",
+        alertColor: "bg-amber-500",
+        bg: "bg-amber-50 border-amber-200 text-amber-700",
+        advice: "Moderate vegetation stress. Chlorophyll levels indicate early yellowing or minor dehydration. Recommend adding NPK fertilizer or increasing watering levels by 15%.",
+        colorMap: ['#f59e0b', '#fbbf24']
+      };
+    } else {
+      return {
+        severity: "OPTIMAL HEALTH",
+        alertColor: "bg-green-500",
+        bg: "bg-green-50 border-green-200 text-green-700",
+        advice: "Excellent vegetation indices. Standard crop canopy density. Maintain standard fertilization and moisture parameters.",
+        colorMap: ['#22c55e', '#4ade80']
+      };
+    }
+  };
+
+  const isCalculateDisabled = () => {
+    if (analyzing) return true;
+    if (analysisMode === 'single') return !singleFile;
+    return !redFile || !nirFile;
+  };
+
+  return (
+    <div className="space-y-6 lg:space-y-8">
+      
+      {/* PAGE HEADER */}
+      <div>
+        <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">NDVI Analysis Laboratory</h2>
+        <p className="text-sm text-slate-500">Perform spectral index calculations from drone/satellite bands and generate high-fidelity heatmaps.</p>
+      </div>
+
+      {/* LAB SETTINGS CONTROL BOARD */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* COLUMN 1: Settings Panel & File Slots */}
+        <div className="glass-panel p-6 rounded-3xl flex flex-col justify-between min-h-[480px]">
+          <div className="space-y-5">
+            <div>
+              <h3 className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Sliders className="w-5 h-5 text-farm-600" />
+                Laboratory Settings
+              </h3>
+              <p className="text-xs text-slate-400">Configure files, bands, and associations.</p>
+            </div>
+
+            {/* Mode selection toggle */}
+            <div className="flex bg-slate-100 p-1.5 rounded-xl border">
+              <button
+                onClick={() => setAnalysisMode('single')}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                  analysisMode === 'single' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Single File (RGB/Tiff)
+              </button>
+              <button
+                onClick={() => setAnalysisMode('dual')}
+                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all ${
+                  analysisMode === 'dual' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Dual Band (Red + NIR)
+              </button>
+            </div>
+
+            {/* Associate Plot */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 font-extrabold uppercase">Plot Association</label>
+              <select 
+                value={selectedPlotId}
+                onChange={(e) => setSelectedPlotId(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-farm-500 font-bold text-xs"
+              >
+                <option value="">No Plot association (Ad-hoc analysis)</option>
+                {plots.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.crop_type})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Dynamic File Upload Inputs */}
+            {analysisMode === 'single' ? (
+              // Single file slot
+              <div 
+                onDragEnter={(e) => handleDrag(e, 'single')}
+                onDragOver={(e) => handleDrag(e, 'single')}
+                onDragLeave={(e) => handleDrag(e, 'single')}
+                onDrop={(e) => handleDrop(e, 'single')}
+                onClick={() => document.getElementById('singleInput').click()}
+                className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center h-40 ${
+                  dragActive.single ? 'border-farm-500 bg-farm-50/40' : 'border-slate-200 hover:border-farm-400 hover:bg-farm-50/5'
+                }`}
+              >
+                <input 
+                  id="singleInput" 
+                  type="file" 
+                  accept="image/*,.tif,.tiff" 
+                  onChange={(e) => handleFileChange(e, 'single')}
+                  className="hidden" 
+                />
+                <Upload className="w-7 h-7 text-farm-600 mb-2" />
+                {singleFile ? (
+                  <div className="max-w-[200px] truncate">
+                    <p className="text-xs font-bold text-slate-700">{singleFile.name}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{(singleFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">Choose GeoTIFF or photo</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Supports JPG, PNG, GeoTIFF</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Dual band inputs (Red and NIR slots)
+              <div className="grid grid-cols-2 gap-3">
+                {/* Red Band Input */}
+                <div 
+                  onDragEnter={(e) => handleDrag(e, 'red')}
+                  onDragOver={(e) => handleDrag(e, 'red')}
+                  onDragLeave={(e) => handleDrag(e, 'red')}
+                  onDrop={(e) => handleDrop(e, 'red')}
+                  onClick={() => document.getElementById('redInput').click()}
+                  className={`border-2 border-dashed rounded-2xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center h-36 ${
+                    dragActive.red ? 'border-farm-500 bg-farm-50/40' : 'border-slate-200 hover:border-farm-400 hover:bg-farm-50/5'
+                  }`}
+                >
+                  <input id="redInput" type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'red')} className="hidden" />
+                  <Upload className="w-5 h-5 text-red-500 mb-1" />
+                  {redFile ? (
+                    <p className="text-[10px] font-bold text-slate-700 truncate w-full px-1">{redFile.name}</p>
+                  ) : (
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight">Upload RED Band</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">Visible Red spectrum</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* NIR Band Input */}
+                <div 
+                  onDragEnter={(e) => handleDrag(e, 'nir')}
+                  onDragOver={(e) => handleDrag(e, 'nir')}
+                  onDragLeave={(e) => handleDrag(e, 'nir')}
+                  onDrop={(e) => handleDrop(e, 'nir')}
+                  onClick={() => document.getElementById('nirInput').click()}
+                  className={`border-2 border-dashed rounded-2xl p-3 text-center cursor-pointer transition flex flex-col items-center justify-center h-36 ${
+                    dragActive.nir ? 'border-farm-500 bg-farm-50/40' : 'border-slate-200 hover:border-farm-400 hover:bg-farm-50/5'
+                  }`}
+                >
+                  <input id="nirInput" type="file" accept="image/*" onChange={(e) => handleFileChange(e, 'nir')} className="hidden" />
+                  <Upload className="w-5 h-5 text-blue-500 mb-1" />
+                  {nirFile ? (
+                    <p className="text-[10px] font-bold text-slate-700 truncate w-full px-1">{nirFile.name}</p>
+                  ) : (
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight">Upload NIR Band</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">Near-Infrared spectrum</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Trigger Button */}
+          <button
+            onClick={handleCalculateNDVI}
+            disabled={isCalculateDisabled()}
+            className={`w-full py-4 rounded-xl font-extrabold text-xs shadow-md transition mt-6 ${
+              isCalculateDisabled()
+                ? 'bg-slate-100 text-slate-400 border shadow-none cursor-not-allowed'
+                : 'bg-gradient-to-r from-farm-600 to-emerald-600 text-white shadow-farm-200 hover:from-farm-700 hover:to-emerald-700'
+            }`}
+          >
+            {analyzing ? (
+              <span className="flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Calculating NDVI Matrices...
+              </span>
+            ) : "Calculate NDVI Health"}
+          </button>
+        </div>
+
+        {/* COLUMN 2 & 3: Visual Split View Preview */}
+        <div className="lg:col-span-2 glass-panel p-6 rounded-3xl flex flex-col h-[480px]">
+          <div className="flex justify-between items-center mb-3">
+            <div>
+              <h3 className="font-bold text-slate-800">Visual Before / Heatmap Analysis</h3>
+              <p className="text-xs text-slate-400">Comparing visible light spectrum (Left) against colormapped NDVI index (Right).</p>
+            </div>
+            
+            {currentAnalysis && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 border text-slate-700`}>
+                Diagnostic: {currentAnalysis.health_classification}
+              </span>
+            )}
+          </div>
+
+          {/* SPLIT PANEL GRID */}
+          <div className="flex-1 border rounded-2xl bg-slate-50 relative overflow-hidden flex divide-x divide-slate-200">
+            {singlePreviewUrl || redPreviewUrl ? (
+              <>
+                {/* Visible Light */}
+                <div className="flex-1 h-full relative">
+                  <img 
+                    src={analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl} 
+                    alt="Original Upload" 
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-[9px] font-extrabold text-white px-2 py-0.5 rounded uppercase tracking-wider">
+                    {analysisMode === 'single' ? 'RGB Photo' : 'RED spectrum band'}
+                  </div>
+                </div>
+
+                {/* Spectral Heatmap */}
+                <div className="flex-1 h-full relative">
+                  {currentAnalysis ? (
+                    <>
+                      <img 
+                        src={currentAnalysis.processed_heatmap_path.startsWith('blob:') ? currentAnalysis.processed_heatmap_path : `/${currentAnalysis.processed_heatmap_path}`} 
+                        alt="Computed Heatmap" 
+                        className="w-full h-full object-cover"
+                        style={!dbStatus.connected ? { filter: 'hue-rotate(110deg) saturate(130%)' } : {}}
+                      />
+                      <button
+                        onClick={handleDownloadHeatmap}
+                        className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 backdrop-blur-xs text-white hover:bg-black/80 transition"
+                        title="Download Heatmap JPEG"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center">
+                      <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
+                      <p className="text-xs font-bold leading-tight">Heatmap Rendering Pending</p>
+                      <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">Click 'Calculate NDVI Health' to execute spectral analysis.</p>
+                    </div>
+                  )}
+                  <div className="absolute bottom-3 left-3 bg-farm-600/80 backdrop-blur-xs text-[9px] font-extrabold text-white px-2 py-0.5 rounded uppercase tracking-wider">
+                    NDVI Heatmap Result
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center">
+                <ImageIcon className="w-12 h-12 text-slate-300 mb-2 animate-bounce" />
+                <h4 className="text-sm font-bold text-slate-600">Spectral Lab Standby</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-[250px] leading-relaxed">
+                  Attach files and choose configurations to generate NDVI heatmaps.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* SPECTRUM ANALYSIS METRICS & HISTOGRAM DISTRIBUTION */}
+      {currentAnalysis && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+          
+          {/* STATS BOARD */}
+          <div className="lg:col-span-1 glass-panel p-6 rounded-3xl flex flex-col justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800 border-b pb-2 mb-4">NDVI Statistics</h3>
+              
+              <div className="space-y-3.5">
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="text-slate-500">Average NDVI Value:</span>
+                  <span className="text-farm-700 text-lg font-black">{currentAnalysis.avg_ndvi}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="text-slate-500">Maximum Reflectance:</span>
+                  <span className="text-slate-800 font-bold">{currentAnalysis.max_ndvi}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs font-semibold">
+                  <span className="text-slate-500">Minimum Reflectance:</span>
+                  <span className="text-slate-800 font-bold">{currentAnalysis.min_ndvi}</span>
+                </div>
+                
+                <div className="flex justify-between items-center text-xs font-semibold pt-2.5 border-t">
+                  <span className="text-slate-500">Diagnostic Health:</span>
+                  <span className="font-extrabold text-slate-800">{currentAnalysis.health_classification}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Diagnostic recommendation banner */}
+            {(() => {
+              const rec = getDiagnosticDetails(currentAnalysis.health_classification);
+              return (
+                <div className={`p-4 rounded-2xl border text-xs font-bold leading-normal mt-4 ${rec.bg}`}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className={`w-2 h-2 rounded-full ${rec.alertColor}`} />
+                    <span className="text-[9px] font-black uppercase tracking-wider">DIAGNOSTIC ADVICE: {rec.severity}</span>
+                  </div>
+                  <span>{rec.advice}</span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* HISTOGRAM BAR CHART */}
+          <div className="lg:col-span-2 glass-panel p-6 rounded-3xl h-[310px] flex flex-col">
+            <div>
+              <h3 className="font-bold text-slate-800">Spectral Histogram Distribution</h3>
+              <p className="text-xs text-slate-400">Frequency distribution mapping pixel ratios from -1.0 (soil/water) to 1.0 (healthy canopy).</p>
+            </div>
+
+            <div className="flex-1 mt-4 w-full h-[200px]">
+              {currentAnalysis.histogram && currentAnalysis.histogram.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={currentAnalysis.histogram}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="bin" 
+                      tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 600 }}
+                      label={{ value: 'NDVI Score Bin', position: 'bottom', offset: 0, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 600 }}
+                      label={{ value: 'Pixel Coverage %', angle: -90, position: 'insideLeft', offset: 5, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
+                    />
+                    <ChartTooltip 
+                      contentStyle={{ background: 'rgba(255, 255, 255, 0.95)', borderRadius: '10px', fontSize: 10 }}
+                    />
+                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                      {currentAnalysis.histogram.map((entry, idx) => {
+                        // Dynamically color histogram bars matching their index values (red for unhealthy, yellow for stressed, green for healthy)
+                        let barColor = '#dc2626'; // red
+                        if (entry.bin >= 0.0 && entry.bin <= 0.2) barColor = '#f59e0b'; // orange/yellow
+                        else if (entry.bin > 0.2 && entry.bin <= 0.5) barColor = '#86efac'; // pale green
+                        else if (entry.bin > 0.5) barColor = '#22c55e'; // pure green
+                        return <Cell key={`cell-${idx}`} fill={barColor} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-400 text-xs font-bold">
+                  No histogram metrics computed.
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* LAB HISTORICAL CATALOG */}
+      <div className="glass-panel rounded-3xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100 bg-white/40 flex justify-between items-center">
+          <h3 className="font-bold text-slate-800 font-sans">Lab Analysis History</h3>
+          <span className="text-[10px] text-slate-400 font-extrabold bg-slate-100 px-2 py-0.5 rounded border">
+            {analysisHistory.length} ENTRIES SAVED
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-6">
+          {analysisHistory.length > 0 ? (
+            analysisHistory.map((hist) => (
+              <div 
+                key={hist.id} 
+                onClick={() => loadPastAnalysis(hist)}
+                className="bg-white border rounded-2xl overflow-hidden shadow-sm hover:border-farm-400 cursor-pointer group transition duration-150"
+              >
+                <div className="h-28 bg-slate-100 relative flex overflow-hidden">
+                  <img 
+                    src={hist.original_image_path.startsWith('blob:') ? hist.original_image_path : `/${hist.original_image_path}`} 
+                    alt="Original" 
+                    className="w-1/2 h-full object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <img 
+                    src={hist.processed_heatmap_path.startsWith('blob:') ? hist.processed_heatmap_path : `/${hist.processed_heatmap_path}`} 
+                    alt="Heatmap" 
+                    className="w-1/2 h-full object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                </div>
+                
+                <div className="p-3.5 space-y-1">
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase">
+                    <span>{hist.date}</span>
+                    <span>ID: #{Math.round(hist.id)}</span>
+                  </div>
+                  
+                  <h4 className="text-xs font-black text-slate-800 truncate mt-1 group-hover:text-farm-600">
+                    {hist.plot_id ? plots.find(p => p.id === hist.plot_id)?.name : 'Ad-hoc Upload'}
+                  </h4>
+                  
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 mt-2 font-semibold">
+                    <span className="text-slate-500">Average NDVI:</span>
+                    <span className="text-farm-700 font-extrabold">{hist.avg_ndvi}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full py-6 text-center text-slate-400 font-bold text-xs">
+              No historical lab analyses registered. Run calculation to save results.
+            </div>
+          )}
+        </div>
+      </div>
+
+    </div>
+  );
+}
