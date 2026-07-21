@@ -8,12 +8,12 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://backend:8000',
+        target: 'https://crop-growth-backend.onrender.com',
         changeOrigin: true,
         secure: false,
       },
       '/static': {
-        target: 'http://backend:8000',
+        target: 'https://crop-growth-backend.onrender.com',
         changeOrigin: true,
         secure: false,
       }
