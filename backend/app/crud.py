@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from datetime import date, timedelta
 import json
+from typing import Optional
 
 def get_plot(db: Session, plot_id: int):
     return db.query(models.Plot).filter(models.Plot.id == plot_id).first()
