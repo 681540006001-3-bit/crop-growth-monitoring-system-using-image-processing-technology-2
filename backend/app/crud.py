@@ -23,6 +23,54 @@ def create_plot(db: Session, plot: schemas.PlotCreate):
     db.add(db_plot)
     db.commit()
     db.refresh(db_plot)
+
+    # Auto-generate initial growth record based on registered status
+    status_lower = db_plot.status.lower()
+    height = 5.0
+    cover = 2.0
+    lai = 0.1
+    ndvi = 0.18
+    notes = "บันทึกเริ่มต้นอัตโนมัติ (ท่อนพันธุ์ปักชำใหม่)"
+    
+    if "healthy" in status_lower or "สมบูรณ์" in status_lower:
+        height = 80.0
+        cover = 75.0
+        lai = 2.1
+        ndvi = 0.65
+        notes = "บันทึกเริ่มต้นอัตโนมัติ (สภาพแปลงสมบูรณ์ดี)"
+    elif "monitor" in status_lower or "เฝ้าระวัง" in status_lower:
+        height = 75.0
+        cover = 60.0
+        lai = 1.5
+        ndvi = 0.45
+        notes = "บันทึกเริ่มต้นอัตโนมัติ (อยู่ระหว่างเฝ้าระวังการเติบโต)"
+    elif "stress" in status_lower or "เครียด" in status_lower:
+        height = 70.0
+        cover = 40.0
+        lai = 0.9
+        ndvi = 0.30
+        notes = "บันทึกเริ่มต้นอัตโนมัติ (พบอาการเครียดหรือโรคด่างมัน CMD)"
+    elif "harvest" in status_lower or "เก็บเกี่ยว" in status_lower:
+        height = 0.0
+        cover = 0.0
+        lai = 0.0
+        ndvi = 0.12
+        notes = "บันทึกเริ่มต้นอัตโนมัติ (เก็บเกี่ยวผลผลิตแล้ว)"
+
+    initial_record = models.GrowthRecord(
+        plot_id=db_plot.id,
+        date=db_plot.planting_date,
+        height_cm=height,
+        canopy_cover_pct=cover,
+        leaf_area_index=lai,
+        ndvi_avg=ndvi,
+        status=db_plot.status,
+        notes=notes
+    )
+    db.add(initial_record)
+    db.commit()
+    db.refresh(db_plot)
+
     return db_plot
 
 def update_plot(db: Session, plot_id: int, plot_data: schemas.PlotCreate):
@@ -111,7 +159,7 @@ def get_dashboard_stats(db: Session):
     ndvi_count = 0
     
     # Track status counts
-    health_counts = {"healthy": 0, "monitoring": 0, "stressed": 0, "harvested": 0}
+    health_counts = {"healthy": 0, "monitoring": 0, "stressed": 0, "harvested": 0, "newly_planted": 0}
     
     for plot in plots:
         # Increment health count
@@ -122,6 +170,8 @@ def get_dashboard_stats(db: Session):
             health_counts["stressed"] += 1
         elif "harvest" in status_key:
             health_counts["harvested"] += 1
+        elif "newly" in status_key or "just" in status_key or "ปลูก" in status_key:
+            health_counts["newly_planted"] += 1
         else:
             health_counts["healthy"] += 1
             

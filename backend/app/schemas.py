@@ -67,12 +67,12 @@ class NDVIAnalysisOut(NDVIAnalysisBase):
     class Config:
         from_attributes = True
 
-# Dashboard Summary Schemas
 class CropHealthSummary(BaseModel):
     healthy: int
     monitoring: int
     stressed: int
     harvested: int
+    newly_planted: int
 
 class DashboardStats(BaseModel):
     total_plots: int

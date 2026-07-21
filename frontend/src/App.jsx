@@ -24,100 +24,19 @@ import NDVIAnalysis from './pages/NDVIAnalysis';
 import Reports from './pages/Reports';
 import GISMap from './pages/GISMap';
 
-const MOCK_PLOTS = [
-  {
-    id: 1,
-    name: "A1 Rice Paddy (North)",
-    crop_type: "Rice",
-    area_rai: 12.5,
-    planting_date: "2026-04-14",
-    status: "Healthy",
-    latitude: 14.3582,
-    longitude: 100.0827,
-    boundary_coordinates: [
-      { lat: 14.3595, lng: 100.0815 },
-      { lat: 14.3595, lng: 100.0839 },
-      { lat: 14.3570, lng: 100.0839 },
-      { lat: 14.3570, lng: 100.0815 }
-    ],
-    growth_records: [
-      { id: 1, plot_id: 1, date: "2026-07-13", height_cm: 102.0, canopy_cover_pct: 92.0, ndvi_avg: 0.78, leaf_area_index: 4.8, status: "Healthy", notes: "Rice growth tracking. Progressing smoothly. Age 90 days." },
-      { id: 2, plot_id: 1, date: "2026-06-28", height_cm: 95.0, canopy_cover_pct: 88.0, ndvi_avg: 0.73, leaf_area_index: 4.5, status: "Healthy", notes: "Rice height close to target. Checking water level." },
-      { id: 3, plot_id: 1, date: "2026-06-13", height_cm: 78.0, canopy_cover_pct: 78.0, ndvi_avg: 0.62, leaf_area_index: 3.8, status: "Healthy", notes: "Tillering stage completed successfully." }
-    ]
-  },
-  {
-    id: 2,
-    name: "B3 Sugarcane Field",
-    crop_type: "Sugarcane",
-    area_rai: 24.0,
-    planting_date: "2026-02-13",
-    status: "Active Monitoring",
-    latitude: 14.3821,
-    longitude: 100.0415,
-    boundary_coordinates: [
-      { lat: 14.3835, lng: 100.0395 },
-      { lat: 14.3835, lng: 100.0435 },
-      { lat: 14.3805, lng: 100.0435 },
-      { lat: 14.3805, lng: 100.0395 }
-    ],
-    growth_records: [
-      { id: 4, plot_id: 2, date: "2026-07-13", height_cm: 260.0, canopy_cover_pct: 82.0, ndvi_avg: 0.70, leaf_area_index: 5.2, status: "Active Monitoring", notes: "Sugarcane monitoring. Stalk elongation stage." },
-      { id: 5, plot_id: 2, date: "2026-06-13", height_cm: 205.0, canopy_cover_pct: 74.0, ndvi_avg: 0.64, leaf_area_index: 4.7, status: "Healthy", notes: "Normal stalk growth." }
-    ]
-  },
-  {
-    id: 3,
-    name: "C2 Cassava Plantation",
-    crop_type: "Cassava",
-    area_rai: 8.2,
-    planting_date: "2026-05-29",
-    status: "Stressed",
-    latitude: 14.3210,
-    longitude: 100.1200,
-    boundary_coordinates: [
-      { lat: 14.3220, lng: 100.1185 },
-      { lat: 14.3220, lng: 100.1215 },
-      { lat: 14.3200, lng: 100.1215 },
-      { lat: 14.3200, lng: 100.1185 }
-    ],
-    growth_records: [
-      { id: 6, plot_id: 3, date: "2026-07-13", height_cm: 60.0, canopy_cover_pct: 45.0, ndvi_avg: 0.38, leaf_area_index: 2.1, status: "Stressed", notes: "Recent yellowing observed on lower leaves. Suspected nitrogen deficiency." }
-    ]
-  },
-  {
-    id: 4,
-    name: "D5 Maize Cultivation",
-    crop_type: "Corn",
-    area_rai: 15.0,
-    planting_date: "2026-03-15",
-    status: "Harvested",
-    latitude: 14.4010,
-    longitude: 100.1510,
-    boundary_coordinates: [
-      { lat: 14.4025, lng: 100.1495 },
-      { lat: 14.4025, lng: 100.1525 },
-      { lat: 14.3995, lng: 100.1525 },
-      { lat: 14.3995, lng: 100.1495 }
-    ],
-    growth_records: [
-      { id: 7, plot_id: 4, date: "2026-07-13", height_cm: 0.0, canopy_cover_pct: 0.0, ndvi_avg: 0.10, leaf_area_index: 0.0, status: "Harvested", notes: "Maize crop successfully harvested. Field stubble remains." },
-      { id: 8, plot_id: 4, date: "2026-06-23", height_cm: 205.0, canopy_cover_pct: 80.0, ndvi_avg: 0.76, leaf_area_index: 3.8, status: "Healthy", notes: "Grain filling stage, approaching harvest." }
-    ]
-  }
-];
+const MOCK_PLOTS = [];
 
 export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [plots, setPlots] = useState(MOCK_PLOTS);
-  const [dbStatus, setDbStatus] = useState({ connected: false, mode: 'Initializing...' });
+  const [dbStatus, setDbStatus] = useState({ connected: false, mode: 'กำลังเชื่อมต่อ...' });
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [stats, setStats] = useState({
-    total_plots: 4,
-    total_area_rai: 59.7,
-    average_ndvi: 0.49,
-    health_summary: { healthy: 2, monitoring: 1, stressed: 1, harvested: 1 }
+    total_plots: 0,
+    total_area_rai: 0.0,
+    average_ndvi: 0.0,
+    health_summary: { healthy: 0, monitoring: 0, stressed: 0, harvested: 0, newly_planted: 0 }
   });
 
   const fetchData = async () => {
@@ -134,25 +53,28 @@ export default function App() {
           setStats(statsData);
         }
         
-        setDbStatus({ connected: true, mode: 'Live System' });
+        setDbStatus({ connected: true, mode: 'เชื่อมต่อฐานข้อมูลหลักสำเร็จ' });
       } else {
         throw new Error('Backend failed');
       }
     } catch (err) {
       console.warn("Backend API offline. Operating in Offline Demo Mode.", err);
-      setDbStatus({ connected: false, mode: 'Demo / Offline' });
+      setDbStatus({ connected: false, mode: 'โหมดออฟไลน์ / จำลองข้อมูล' });
       
       const totalPlots = MOCK_PLOTS.length;
       const totalArea = MOCK_PLOTS.reduce((acc, p) => acc + p.area_rai, 0);
-      const activeNdviPlots = MOCK_PLOTS.filter(p => p.growth_records.length > 0);
-      const avgNdvi = activeNdviPlots.reduce((acc, p) => acc + p.growth_records[0].ndvi_avg, 0) / activeNdviPlots.length;
+      const activeNdviPlots = MOCK_PLOTS.filter(p => p?.growth_records && p.growth_records.length > 0);
+      const avgNdvi = activeNdviPlots.length > 0 
+        ? (activeNdviPlots.reduce((acc, p) => acc + p.growth_records[0].ndvi_avg, 0) / activeNdviPlots.length) 
+        : 0.0;
       
-      const healthSummary = { healthy: 0, monitoring: 0, stressed: 0, harvested: 0 };
+      const healthSummary = { healthy: 0, monitoring: 0, stressed: 0, harvested: 0, newly_planted: 0 };
       MOCK_PLOTS.forEach(p => {
         const statusKey = p.status.toLowerCase().replace(" ", "_");
         if (statusKey.includes("monitor") || statusKey.includes("active")) healthSummary.monitoring++;
         else if (statusKey.includes("stress")) healthSummary.stressed++;
         else if (statusKey.includes("harvest")) healthSummary.harvested++;
+        else if (statusKey.includes("newly") || statusKey.includes("just") || statusKey.includes("ปลูก")) healthSummary.newly_planted++;
         else healthSummary.healthy++;
       });
 
@@ -198,23 +120,23 @@ export default function App() {
         return (
           <div className="space-y-6 lg:space-y-8 max-w-2xl">
             <div>
-              <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">System Settings</h2>
-              <p className="text-sm text-slate-500">Configure connection strings, API credentials, and default colormap preferences.</p>
+              <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">ตั้งค่าระบบ (System Settings)</h2>
+              <p className="text-sm text-slate-500">จัดการข้อมูลการเชื่อมต่อระบบฐานข้อมูล, คีย์แผนที่ดาวเทียม และตัวเลือกการวิเคราะห์ค่าดัชนี</p>
             </div>
             
             <div className="glass-panel p-6 rounded-3xl space-y-6">
               <div className="space-y-4">
                 <h3 className="font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
                   <Database className="w-5 h-5 text-farm-600" />
-                  Geospatial Database Connection
+                  การเชื่อมต่อฐานข้อมูลภูมิสารสนเทศ
                 </h3>
                 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 font-extrabold uppercase">Database Driver URL</label>
+                  <label className="text-[10px] text-slate-400 font-extrabold uppercase">Database Connection URL</label>
                   <input 
                     type="text" 
                     readOnly
-                    value={dbStatus.connected ? "mysql+pymysql://farmer:agriculture_secret_123@db/smart_farming" : "sqlite:///./farming.db (Fallback Active)"}
+                    value={dbStatus.connected ? "mysql+pymysql://farmer:agriculture_secret_123@db/smart_farming" : "sqlite:///./farming.db (ฐานข้อมูล SQLite ชั่วคราว)"}
                     className="w-full px-3.5 py-2.5 rounded-xl border bg-slate-50 text-slate-500 font-mono text-xs focus:outline-none"
                   />
                 </div>
@@ -223,17 +145,17 @@ export default function App() {
               <div className="space-y-4 pt-4 border-t border-slate-100">
                 <h3 className="font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
                   <Layers className="w-5 h-5 text-farm-600" />
-                  GIS Layer Configurations
+                  การตั้งค่าแผนที่ดาวเทียม GIS
                 </h3>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    <span>Google Maps API Satellite Base Hybrid layer</span>
-                    <span className="text-green-600 font-bold">Enabled (Zero-Key CDN)</span>
+                    <span>แผนที่ดาวเทียม Google Maps (Satellite Base Hybrid)</span>
+                    <span className="text-green-600 font-bold">เปิดใช้งานแล้ว (CDN ฟรี)</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                    <span>OpenStreetMap Vector layer</span>
-                    <span className="text-green-600 font-bold">Enabled (OSM org)</span>
+                    <span>แผนที่แบบเวกเตอร์ OpenStreetMap</span>
+                    <span className="text-green-600 font-bold">เปิดใช้งานแล้ว</span>
                   </div>
                 </div>
               </div>
@@ -241,25 +163,25 @@ export default function App() {
               <div className="space-y-4 pt-4 border-t border-slate-100">
                 <h3 className="font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
                   <Settings className="w-5 h-5 text-farm-600" />
-                  Spectral Index Calibration
+                  ตัวเลือกการสอบเทียบดัชนีพืชพรรณ
                 </h3>
                 
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 font-extrabold uppercase">RGB Foliage Proxy Algorithm</label>
+                    <label className="text-[10px] text-slate-400 font-extrabold uppercase">อัลกอริทึมวิเคราะห์ภาพสีธรรมดา (RGB Proxy)</label>
                     <select className="w-full px-3 py-2 rounded-xl border bg-white font-semibold text-xs focus:outline-none">
-                      <option>GLI - Green Leaf Index (Recommended for RGB photos)</option>
+                      <option>GLI - Green Leaf Index (แนะนำสำหรับภาพถ่ายกล้องธรรมดา)</option>
                       <option>ExG - Excess Green Index</option>
                       <option>VARI - Visible Atmospherically Resistant Index</option>
                     </select>
                   </div>
                   
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-400 font-extrabold uppercase">Spectral Colormap Palette</label>
+                    <label className="text-[10px] text-slate-400 font-extrabold uppercase">จานสีแสดงผล (NDVI Heatmap Colormap)</label>
                     <select className="w-full px-3 py-2 rounded-xl border bg-white font-semibold text-xs focus:outline-none">
-                      <option>Precision Red-Yellow-Green Colormap (Dense contrast)</option>
-                      <option>Standard NDVI Rainbow Colormap</option>
-                      <option>Grayscale Spectral Reflectance</option>
+                      <option>Precision Red-Yellow-Green (แดง-เหลือง-เขียว ความต่างสีสูง)</option>
+                      <option>Standard NDVI Rainbow (จานสีรุ้งมาตรฐาน)</option>
+                      <option>Grayscale (โทนขาวดำวิเคราะห์ความเข้มแสง)</option>
                     </select>
                   </div>
                 </div>
@@ -268,10 +190,10 @@ export default function App() {
               <div className="pt-4 flex gap-3 border-t">
                 <button 
                   type="button"
-                  onClick={() => alert('Configuration profiles saved locally.')}
+                  onClick={() => alert('บันทึกการตั้งค่าลงในเครื่องสำเร็จ')}
                   className="flex-1 py-3 text-white bg-farm-600 hover:bg-farm-700 rounded-xl font-extrabold text-xs shadow-md shadow-farm-200 transition"
                 >
-                  Save Configurations
+                  บันทึกการตั้งค่า
                 </button>
               </div>
             </div>
@@ -298,8 +220,8 @@ export default function App() {
               <Sprout className="w-5.5 h-5.5" />
             </div>
             <div>
-              <h1 className="font-extrabold text-[1.125rem] text-slate-900 leading-tight">CropIntel OS</h1>
-              <span className="text-[0.6875rem] font-bold text-farm-600 tracking-wider uppercase">Farming Image AI</span>
+              <h1 className="font-extrabold text-[1.125rem] text-slate-900 leading-tight">CassavaIntel OS</h1>
+              <span className="text-[0.6875rem] font-bold text-farm-600 tracking-wider uppercase">ระบบวิเคราะห์มันสำปะหลัง</span>
             </div>
           </div>
           <button 
@@ -313,13 +235,13 @@ export default function App() {
         {/* MENU TABS */}
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'plots', label: 'Crop Plots', icon: Map },
-            { id: 'gis', label: 'GIS Mapping', icon: Compass },
-            { id: 'growth', label: 'Growth Monitoring', icon: Sprout },
-            { id: 'ndvi', label: 'NDVI Analysis', icon: ImageIcon },
-            { id: 'reports', label: 'Reports', icon: BarChart3 },
-            { id: 'settings', label: 'Settings', icon: Settings },
+            { id: 'dashboard', label: 'แผงวิเคราะห์หลัก', icon: LayoutDashboard },
+            { id: 'plots', label: 'จัดการแปลงเพาะปลูก', icon: Map },
+            { id: 'gis', label: 'แผนที่ดาวเทียม GIS', icon: Compass },
+            { id: 'growth', label: 'บันทึกการเติบโต', icon: Sprout },
+            { id: 'ndvi', label: 'วิเคราะห์ดัชนี NDVI', icon: ImageIcon },
+            { id: 'reports', label: 'รายงานและผลผลิต', icon: BarChart3 },
+            { id: 'settings', label: 'ตั้งค่าระบบ', icon: Settings },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activePage === item.id;
@@ -347,7 +269,7 @@ export default function App() {
               <Database className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[0.6875rem] text-slate-400 font-semibold uppercase tracking-wider leading-none">Database Status</p>
+              <p className="text-[0.6875rem] text-slate-400 font-semibold uppercase tracking-wider leading-none">สถานะฐานข้อมูล</p>
               <h4 className="text-xs font-bold text-slate-700 mt-1 truncate">{dbStatus.mode}</h4>
             </div>
             <div className={`w-2.5 h-2.5 rounded-full ${dbStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
@@ -355,7 +277,7 @@ export default function App() {
           
           <div className="flex items-center gap-2 mt-4 px-3 text-[0.75rem] text-slate-400 font-semibold">
             <Compass className="w-3.5 h-3.5" />
-            <span>Ver. 2.1 • Smart Farming</span>
+            <span>เวอร์ชัน 2.1 • เกษตรอัจฉริยะ</span>
           </div>
         </div>
       </aside>
@@ -374,15 +296,15 @@ export default function App() {
             </button>
             
             <div className="hidden sm:block">
-              <h2 className="text-sm font-bold text-slate-900">Precision Agriculture Hub</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Crop Growth Monitoring System</p>
+              <h2 className="text-sm font-bold text-slate-900">ระบบสารสนเทศมันสำปะหลังอัจฉริยะ (CassavaIntel)</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Cassava Growth, Starch Content & Yield Estimation System</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-slate-200/60 shadow-sm text-slate-600 text-xs font-semibold">
               <CloudSun className="w-4 h-4 text-amber-500" />
-              <span>Suphan Buri, TH • 31°C</span>
+              <span>สุพรรณบุรี • 31°C</span>
             </div>
 
             <button 
@@ -390,13 +312,13 @@ export default function App() {
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-farm-600 hover:bg-farm-700 text-white font-bold text-xs shadow-sm hover:shadow transition-all duration-200"
             >
               <Plus className="w-4 h-4" />
-              <span>Quick NDVI Upload</span>
+              <span>วิเคราะห์ภาพด่วน</span>
             </button>
 
             <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
               <div className="hidden text-right lg:block">
-                <h4 className="text-xs font-bold text-slate-900">Dr. Mark Hanson</h4>
-                <p className="text-[0.6875rem] text-slate-400 font-semibold">Farm Director</p>
+                <h4 className="text-xs font-bold text-slate-900">ดร. มาร์ค แฮนสัน</h4>
+                <p className="text-[0.6875rem] text-slate-400 font-semibold">ผู้ดูแลโครงการ</p>
               </div>
               <div className="w-9 h-9 rounded-xl bg-farm-100 text-farm-700 border border-farm-200 flex items-center justify-center font-bold text-sm shadow-inner shadow-farm-200/50">
                 <User className="w-4 h-4" />
@@ -410,7 +332,7 @@ export default function App() {
           {loading ? (
             <div className="flex flex-col items-center justify-center h-96 gap-4">
               <div className="w-10 h-10 border-4 border-farm-200 border-t-farm-600 rounded-full animate-spin" />
-              <p className="text-sm font-semibold text-slate-500">Loading system metrics...</p>
+              <p className="text-sm font-semibold text-slate-500">กำลังโหลดระบบวิเคราะห์มันสำปะหลัง...</p>
             </div>
           ) : (
             <div className="fade-in">

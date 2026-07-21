@@ -1,16 +1,15 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# เปลี่ยนจาก libgl1-mesa-glx เป็น libgl1 เพื่อแก้ปัญหา Package Error
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgdal-dev \
     gdal-bin \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set GDAL environment variables for Rasterio installation compile step
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
@@ -18,11 +17,12 @@ WORKDIR /app
 
 COPY requirements.txt .
 
+# อัปเดตเครื่องมือติดตั้ง เพื่อป้องกัน Error ตอนลง Rasterio/GDAL
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Create directory structure for uploads
 RUN mkdir -p static/uploads
 
 EXPOSE 8000

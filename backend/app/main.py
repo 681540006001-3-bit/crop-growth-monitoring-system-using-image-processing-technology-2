@@ -14,8 +14,8 @@ from app.database import engine, get_db
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Crop Growth Monitoring & NDVI Analysis API",
-    description="Backend API for Precision Agriculture dashboards and image analysis.",
+    title="Cassava Growth Monitoring & Starch Prediction API",
+    description="Backend API for Cassava precision agriculture and starch content prediction models.",
     version="1.0.0"
 )
 
@@ -31,11 +31,12 @@ app.add_middleware(
 # Seed database on startup
 @app.on_event("startup")
 def startup_event():
-    db = next(get_db())
-    try:
-        crud.seed_database_if_empty(db)
-    except Exception as e:
-        print(f"Error seeding database on startup: {e}")
+    # db = next(get_db())
+    # try:
+    #     crud.seed_database_if_empty(db)
+    # except Exception as e:
+    #     print(f"Error seeding database on startup: {e}")
+    pass
 
 # Mount static folder for uploads and heatmaps
 # Configures path to serve files uploaded to /app/static/uploads via /static/
@@ -45,7 +46,7 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 @app.get("/api/health", tags=["System"])
 def health_check():
-    return {"status": "healthy", "service": "Crop Growth Monitoring API"}
+    return {"status": "healthy", "service": "Cassava Growth Monitoring API"}
 
 # Plot Endpoints
 @app.get("/api/plots", response_model=List[schemas.PlotOut], tags=["Plots"])

@@ -68,7 +68,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
           min_ndvi: 0.12,
           max_ndvi: 0.88,
           avg_ndvi: 0.78,
-          health_classification: "Healthy (Dense Canopy)",
+          health_classification: "สมบูรณ์ดีมาก (Healthy Canopy)",
           histogram: [
             { bin: -0.9, percentage: 0.2 },
             { bin: -0.7, percentage: 0.1 },
@@ -91,7 +91,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
           min_ndvi: -0.05,
           max_ndvi: 0.62,
           avg_ndvi: 0.38,
-          health_classification: "Moderate Stress",
+          health_classification: "เครียดปานกลาง (Moderate Stress)",
           histogram: [
             { bin: -0.9, percentage: 1.5 },
             { bin: -0.7, percentage: 2.2 },
@@ -164,98 +164,103 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
     }
   };
 
-  // NDVI calculation trigger
-  const handleCalculateNDVI = async (e) => {
-    e.preventDefault();
+  const handleCalculateNDVI = async () => {
     setAnalyzing(true);
     setCurrentAnalysis(null);
 
+    const formData = new FormData();
+    if (selectedPlotId) {
+      formData.append('plot_id', selectedPlotId);
+    }
+
     if (dbStatus.connected) {
       try {
-        const formData = new FormData();
-        if (selectedPlotId) formData.append('plot_id', selectedPlotId);
-
-        let response;
+        let endpoint = '/api/analysis';
         if (analysisMode === 'single') {
-          if (!singleFile) return;
-          formData.append('image', singleFile);
-          response = await fetch('/api/analysis', {
-            method: 'POST',
-            body: formData
-          });
+          formData.append('file', singleFile);
         } else {
-          if (!redFile || !nirFile) return;
-          formData.append('red_image', redFile);
-          formData.append('nir_image', nirFile);
-          response = await fetch('/api/analysis/dual', {
-            method: 'POST',
-            body: formData
-          });
+          formData.append('red_file', redFile);
+          formData.append('nir_file', nirFile);
+          endpoint = '/api/analysis/dual';
         }
 
-        if (response.ok) {
-          const data = await response.json();
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          const data = await res.json();
           setCurrentAnalysis(data);
           fetchHistory();
-          onRefresh();
+          onRefresh(); // Refresh parent states
         } else {
-          const err = await response.json();
-          alert(err.detail || "Image spectral analysis failed");
+          const errData = await res.json();
+          alert(`วิเคราะห์ล้มเหลว: ${errData.detail || 'การเชื่อมต่อผิดพลาด'}`);
         }
       } catch (err) {
-        alert("API connection failure during analysis");
+        alert("ไม่สามารถสื่อสารกับเซิร์ฟเวอร์เพื่อทำการประมวลผลดัชนีแสงพืชได้");
       } finally {
         setAnalyzing(false);
       }
     } else {
-      // Offline mock calculation
+      // Mock computation locally in Demo Mode
       setTimeout(() => {
-        const isStressed = Math.random() > 0.5;
-        const avg = isStressed ? 0.31 : 0.74;
-        
-        // Mock 10 bins histogram
-        const mockHistogram = Array.from({ length: 10 }).map((_, i) => {
-          const binCenter = roundToDec((i * 0.2 - 0.9), 1);
-          // Distribute peaks based on stress
-          let pct = 2.0;
-          if (isStressed) {
-            if (binCenter >= 0.1 && binCenter <= 0.4) pct = 32.5;
-            else if (binCenter < 0.1) pct = 15.0;
-          } else {
-            if (binCenter >= 0.5 && binCenter <= 0.8) pct = 38.4;
-            else if (binCenter < 0.5) pct = 4.2;
-          }
-          return { bin: binCenter, percentage: pct };
-        });
-
-        const result = {
-          id: Math.random(),
+        const mockResult = {
+          id: Math.random() * 100,
           plot_id: selectedPlotId ? Number(selectedPlotId) : null,
           date: new Date().toISOString().split('T')[0],
           original_image_path: analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl,
-          processed_heatmap_path: analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl,
-          min_ndvi: isStressed ? -0.12 : 0.18,
-          max_ndvi: isStressed ? 0.54 : 0.94,
-          avg_ndvi: avg,
-          health_classification: isStressed ? "Moderate Stress" : "Healthy (Dense Canopy)",
-          histogram: mockHistogram
+          processed_heatmap_path: analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl, // maps before image as preview placeholder
+          min_ndvi: 0.05,
+          max_ndvi: 0.85,
+          avg_ndvi: selectedPlotId ? (plots.find(p => p.id === Number(selectedPlotId))?.growth_records?.[0]?.ndvi_avg || 0.65) : 0.65,
+          health_classification: selectedPlotId ? (plots.find(p => p.id === Number(selectedPlotId))?.status || "สภาพพืชสมบูรณ์ (Healthy)") : "สภาพพืชสมบูรณ์ (Healthy)",
+          histogram: [
+            { bin: -0.9, percentage: 0.5 },
+            { bin: -0.7, percentage: 0.3 },
+            { bin: -0.5, percentage: 0.8 },
+            { bin: -0.3, percentage: 1.4 },
+            { bin: -0.1, percentage: 3.2 },
+            { bin: 0.1, percentage: 9.8 },
+            { bin: 0.3, percentage: 18.2 },
+            { bin: 0.5, percentage: 32.5 },
+            { bin: 0.7, percentage: 28.3 },
+            { bin: 0.9, percentage: 5.0 }
+          ]
         };
 
-        setCurrentAnalysis(result);
-        setAnalysisHistory(prev => [result, ...prev]);
+        // Add records dynamically to local array in memory
+        if (selectedPlotId) {
+          const target = plots.find(p => p.id === Number(selectedPlotId));
+          if (target) {
+            target.growth_records.unshift({
+              id: Math.random() * 100,
+              plot_id: target.id,
+              date: mockResult.date,
+              height_cm: target.growth_records?.[0]?.height_cm || 85.0,
+              canopy_cover_pct: target.growth_records?.[0]?.canopy_cover_pct || 75.0,
+              ndvi_avg: mockResult.avg_ndvi,
+              leaf_area_index: target.growth_records?.[0]?.leaf_area_index || 3.5,
+              status: mockResult.health_classification,
+              notes: "วิเคราะห์ดัชนี NDVI จากภาพถ่ายทางอากาศ (โหมดจำลองออฟไลน์)"
+            });
+          }
+        }
+
+        setCurrentAnalysis(mockResult);
+        setAnalysisHistory(prev => [mockResult, ...prev]);
         setAnalyzing(false);
         onRefresh();
-      }, 1500);
+      }, 2000);
     }
   };
 
   const loadPastAnalysis = (past) => {
     setCurrentAnalysis(past);
-    // Bind original preview path
     setSinglePreviewUrl(past.original_image_path.startsWith('blob:') ? past.original_image_path : `/${past.original_image_path}`);
   };
 
-  // Download action
   const handleDownloadHeatmap = () => {
     if (!currentAnalysis) return;
     const path = currentAnalysis.processed_heatmap_path;
@@ -269,35 +274,30 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
     document.body.removeChild(link);
   };
 
-  const roundToDec = (num, decs) => {
-    return Math.round(num * Math.pow(10, decs)) / Math.pow(10, decs);
-  };
-
-  // Diagnostic Interpretation details
   const getDiagnosticDetails = (status) => {
     const s = status.toLowerCase();
-    if (s.includes("severe")) {
+    if (s.includes("severe") || s.includes("วิกฤต") || s.includes("รุนแรง")) {
       return {
-        severity: "CRITICAL ALERT",
+        severity: "วิกฤตเตือนภัย (CMD & CRITICAL ALERT)",
         alertColor: "bg-red-500",
         bg: "bg-red-50 border-red-200 text-red-700",
-        advice: "Severe crop stress detected. Inspect drip lines immediately for blockages, test soil moisture values, and schedule manual pest checks.",
+        advice: "พบภาพแปลงมันสำปะหลังที่มีค่าดัชนี NDVI ต่ำผิดปกติ อาจเป็นสัญญาณของโรคใบด่างมันสำปะหลัง (CMD) หรือการระบาดของเพลี้ยแป้งรุนแรง ควรส่งเจ้าหน้าที่เข้าตรวจเช็คแปลง สุ่มขุดดูหัวมัน และเพิ่มโพแทสเซียมเพื่อฟื้นฟูรากโดยด่วน",
         colorMap: ['#ef4444', '#f87171']
       };
-    } else if (s.includes("moderate") || s.includes("stress")) {
+    } else if (s.includes("moderate") || s.includes("stress") || s.includes("เครียด") || s.includes("ลดลง")) {
       return {
-        severity: "MILD STRESS",
+        severity: "เฝ้าระวังความเครียดพืช (MILD STRESS)",
         alertColor: "bg-amber-500",
         bg: "bg-amber-50 border-amber-200 text-amber-700",
-        advice: "Moderate vegetation stress. Chlorophyll levels indicate early yellowing or minor dehydration. Recommend adding NPK fertilizer or increasing watering levels by 15%.",
+        advice: "พบค่าดัชนีใบมันสำปะหลังลดลงเล็กน้อย ใบเริ่มเหลืองหรือขาดปุ๋ยบำรุงหัว แนะนำให้เสริมปุ๋ยบำรุงพุ่ม (NPK สูตร 15-15-15 หรือเร่งหัวมันด้วยสูตรโพแทสเซียมสูงเช่น 15-0-120) เพื่อพยุงคุณภาพน้ำแป้ง",
         colorMap: ['#f59e0b', '#fbbf24']
       };
     } else {
       return {
-        severity: "OPTIMAL HEALTH",
+        severity: "สภาพพืชปกติและสมบูรณ์ดี (OPTIMAL HEALTH)",
         alertColor: "bg-green-500",
         bg: "bg-green-50 border-green-200 text-green-700",
-        advice: "Excellent vegetation indices. Standard crop canopy density. Maintain standard fertilization and moisture parameters.",
+        advice: "ต้นมันสำปะหลังสมบูรณ์ดีเยี่ยม โครงสร้างทรงพุ่มใบมีสีเขียวสดหนาแน่น คาดว่าการลงหัวสะสมแป้งมีประสิทธิผลสูง แนะนำให้รักษามาตรฐานการตรวจโรคใบด่าง CMD อย่างสม่ำเสมอ",
         colorMap: ['#22c55e', '#4ade80']
       };
     }
@@ -314,8 +314,8 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
       
       {/* PAGE HEADER */}
       <div>
-        <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">NDVI Analysis Laboratory</h2>
-        <p className="text-sm text-slate-500">Perform spectral index calculations from drone/satellite bands and generate high-fidelity heatmaps.</p>
+        <h2 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">ห้องแล็บประมวลผลดัชนีใบมันสำปะหลัง (NDVI Lab)</h2>
+        <p className="text-sm text-slate-500">ประมวลผลภาพถ่ายทางอากาศย่านคลื่นแสงสะท้อนคลอโรฟิลล์เพื่อตรวจหาโรคใบด่าง CMD และประเมินความพร้อมการลงหัวของมันสำปะหลัง</p>
       </div>
 
       {/* LAB SETTINGS CONTROL BOARD */}
@@ -327,9 +327,9 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
             <div>
               <h3 className="font-bold text-slate-800 flex items-center gap-1.5">
                 <Sliders className="w-5 h-5 text-farm-600" />
-                Laboratory Settings
+                ตั้งค่าเครื่องมือวิเคราะห์
               </h3>
-              <p className="text-xs text-slate-400">Configure files, bands, and associations.</p>
+              <p className="text-xs text-slate-400">เลือกประเภทไฟล์ ย่านความถี่คลื่น และแปลงพืชเพื่อจับคู่</p>
             </div>
 
             {/* Mode selection toggle */}
@@ -340,7 +340,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                   analysisMode === 'single' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Single File (RGB/Tiff)
+                ไฟล์เดี่ยว (RGB/Tiff)
               </button>
               <button
                 onClick={() => setAnalysisMode('dual')}
@@ -348,28 +348,27 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                   analysisMode === 'dual' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Dual Band (Red + NIR)
+                สองช่องแสง (Red + NIR)
               </button>
             </div>
 
             {/* Associate Plot */}
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 font-extrabold uppercase">Plot Association</label>
+              <label className="text-[10px] text-slate-400 font-extrabold uppercase">ผูกข้อมูลกับแปลงเพาะปลูก</label>
               <select 
                 value={selectedPlotId}
                 onChange={(e) => setSelectedPlotId(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-farm-500 font-bold text-xs"
               >
-                <option value="">No Plot association (Ad-hoc analysis)</option>
+                <option value="">ไม่จับคู่กับแปลง (รันวิเคราะห์ภาพด่วนชั่วคราว)</option>
                 {plots.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.crop_type})</option>
+                  <option key={p.id} value={p.id}>{p.name} ({p.crop_type === 'Rice' ? 'ข้าว' : p.crop_type === 'Sugarcane' ? 'อ้อย' : p.crop_type})</option>
                 ))}
               </select>
             </div>
 
             {/* Dynamic File Upload Inputs */}
             {analysisMode === 'single' ? (
-              // Single file slot
               <div 
                 onDragEnter={(e) => handleDrag(e, 'single')}
                 onDragOver={(e) => handleDrag(e, 'single')}
@@ -395,13 +394,12 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                   </div>
                 ) : (
                   <div>
-                    <p className="text-xs font-bold text-slate-700">Choose GeoTIFF or photo</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Supports JPG, PNG, GeoTIFF</p>
+                    <p className="text-xs font-bold text-slate-700">เลือกรูปถ่ายพืชพรรณ หรือ GeoTIFF</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">รองรับสกุลไฟล์ JPG, PNG, GeoTIFF</p>
                   </div>
                 )}
               </div>
             ) : (
-              // Dual band inputs (Red and NIR slots)
               <div className="grid grid-cols-2 gap-3">
                 {/* Red Band Input */}
                 <div 
@@ -420,8 +418,8 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                     <p className="text-[10px] font-bold text-slate-700 truncate w-full px-1">{redFile.name}</p>
                   ) : (
                     <div>
-                      <p className="text-[10px] font-bold text-slate-700 leading-tight">Upload RED Band</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">Visible Red spectrum</p>
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight">นำเข้าย่านแสง RED</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">ช่วงคลื่นแสงแดงที่พืชดูดกลืน</p>
                     </div>
                   )}
                 </div>
@@ -443,8 +441,8 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                     <p className="text-[10px] font-bold text-slate-700 truncate w-full px-1">{nirFile.name}</p>
                   ) : (
                     <div>
-                      <p className="text-[10px] font-bold text-slate-700 leading-tight">Upload NIR Band</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">Near-Infrared spectrum</p>
+                      <p className="text-[10px] font-bold text-slate-700 leading-tight">นำเข้าย่านแสง NIR</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 leading-none">ช่วงคลื่นอินฟราเรดใกล้สะท้อนใบพืช</p>
                     </div>
                   )}
                 </div>
@@ -465,9 +463,9 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
             {analyzing ? (
               <span className="flex items-center justify-center gap-2">
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Calculating NDVI Matrices...
+                กำลังประมวลผลพิกเซลดัชนีแสงพืช...
               </span>
-            ) : "Calculate NDVI Health"}
+            ) : "คำนวณดัชนีความสมบูรณ์พืช"}
           </button>
         </div>
 
@@ -475,13 +473,13 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
         <div className="lg:col-span-2 glass-panel p-6 rounded-3xl flex flex-col h-[480px]">
           <div className="flex justify-between items-center mb-3">
             <div>
-              <h3 className="font-bold text-slate-800">Visual Before / Heatmap Analysis</h3>
-              <p className="text-xs text-slate-400">Comparing visible light spectrum (Left) against colormapped NDVI index (Right).</p>
+              <h3 className="font-bold text-slate-800">การเปรียบเทียบภาพดั้งเดิมกับแผนภาพความร้อน</h3>
+              <p className="text-xs text-slate-400">เปรียบเทียบคลื่นแสงธรรมชาติพืชจริง (ซ้าย) กับการคัดแยกสีเชิงดัชนี NDVI (ขวา)</p>
             </div>
             
             {currentAnalysis && (
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 border text-slate-700`}>
-                Diagnostic: {currentAnalysis.health_classification}
+                ประเมินสภาพใบ: {currentAnalysis.health_classification}
               </span>
             )}
           </div>
@@ -494,11 +492,11 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                 <div className="flex-1 h-full relative">
                   <img 
                     src={analysisMode === 'single' ? singlePreviewUrl : redPreviewUrl} 
-                    alt="Original Upload" 
+                    alt="Original" 
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-[9px] font-extrabold text-white px-2 py-0.5 rounded uppercase tracking-wider">
-                    {analysisMode === 'single' ? 'RGB Photo' : 'RED spectrum band'}
+                    {analysisMode === 'single' ? 'ภาพถ่ายแสงจริง (RGB)' : 'ภาพช่องแสงสีแดง (RED)'}
                   </div>
                 </div>
 
@@ -508,14 +506,14 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                     <>
                       <img 
                         src={currentAnalysis.processed_heatmap_path.startsWith('blob:') ? currentAnalysis.processed_heatmap_path : `/${currentAnalysis.processed_heatmap_path}`} 
-                        alt="Computed Heatmap" 
+                        alt="NDVI Heatmap" 
                         className="w-full h-full object-cover"
                         style={!dbStatus.connected ? { filter: 'hue-rotate(110deg) saturate(130%)' } : {}}
                       />
                       <button
                         onClick={handleDownloadHeatmap}
                         className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 backdrop-blur-xs text-white hover:bg-black/80 transition"
-                        title="Download Heatmap JPEG"
+                        title="ดาวน์โหลดภาพแผนที่ความร้อนพืช"
                       >
                         <Download className="w-4 h-4" />
                       </button>
@@ -523,21 +521,21 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center">
                       <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
-                      <p className="text-xs font-bold leading-tight">Heatmap Rendering Pending</p>
-                      <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">Click 'Calculate NDVI Health' to execute spectral analysis.</p>
+                      <p className="text-xs font-bold leading-tight">รอประมวลผลดัชนีสีความร้อนพืช</p>
+                      <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">กดปุ่ม "คำนวณดัชนีความสมบูรณ์พืช" ด้านซ้ายเพื่อเริ่มทำการวิเคราะห์หาค่าสี</p>
                     </div>
                   )}
                   <div className="absolute bottom-3 left-3 bg-farm-600/80 backdrop-blur-xs text-[9px] font-extrabold text-white px-2 py-0.5 rounded uppercase tracking-wider">
-                    NDVI Heatmap Result
+                    ผลวิเคราะห์แผนภาพความร้อน NDVI
                   </div>
                 </div>
               </>
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center">
-                <ImageIcon className="w-12 h-12 text-slate-300 mb-2 animate-bounce" />
-                <h4 className="text-sm font-bold text-slate-600">Spectral Lab Standby</h4>
+                <ImageIcon className="w-12 h-12 text-slate-300 mb-2" />
+                <h4 className="text-sm font-bold text-slate-600">สถานีวิเคราะห์ภาพทางอากาศหลักพร้อมทำงาน</h4>
                 <p className="text-xs text-slate-400 mt-1 max-w-[250px] leading-relaxed">
-                  Attach files and choose configurations to generate NDVI heatmaps.
+                  กรุณาอัปโหลดรูปภาพพืชและเลือกประเภทแปลงเกษตรเพื่อแปลงเป็นภาพแผนความร้อนพืชพรรณพืช
                 </p>
               </div>
             )}
@@ -553,24 +551,24 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
           {/* STATS BOARD */}
           <div className="lg:col-span-1 glass-panel p-6 rounded-3xl flex flex-col justify-between">
             <div>
-              <h3 className="font-bold text-slate-800 border-b pb-2 mb-4">NDVI Statistics</h3>
+              <h3 className="font-bold text-slate-800 border-b pb-2 mb-4">สถิติค่าดัชนี NDVI</h3>
               
               <div className="space-y-3.5">
                 <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="text-slate-500">Average NDVI Value:</span>
+                  <span className="text-slate-500">ค่าเฉลี่ยดัชนี NDVI รวม:</span>
                   <span className="text-farm-700 text-lg font-black">{currentAnalysis.avg_ndvi}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="text-slate-500">Maximum Reflectance:</span>
+                  <span className="text-slate-500">ค่าสะท้อนแสงพืชพรรณสูงสุด (Max):</span>
                   <span className="text-slate-800 font-bold">{currentAnalysis.max_ndvi}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs font-semibold">
-                  <span className="text-slate-500">Minimum Reflectance:</span>
+                  <span className="text-slate-500">ค่าสะท้อนแสงพืชพรรณต่ำสุด (Min):</span>
                   <span className="text-slate-800 font-bold">{currentAnalysis.min_ndvi}</span>
                 </div>
                 
                 <div className="flex justify-between items-center text-xs font-semibold pt-2.5 border-t">
-                  <span className="text-slate-500">Diagnostic Health:</span>
+                  <span className="text-slate-500">ผลการวินิจฉัยสุขภาพพืช:</span>
                   <span className="font-extrabold text-slate-800">{currentAnalysis.health_classification}</span>
                 </div>
               </div>
@@ -583,7 +581,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                 <div className={`p-4 rounded-2xl border text-xs font-bold leading-normal mt-4 ${rec.bg}`}>
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <div className={`w-2 h-2 rounded-full ${rec.alertColor}`} />
-                    <span className="text-[9px] font-black uppercase tracking-wider">DIAGNOSTIC ADVICE: {rec.severity}</span>
+                    <span className="text-[9px] font-black uppercase tracking-wider">คำแนะนำวิชาการ: {rec.severity}</span>
                   </div>
                   <span>{rec.advice}</span>
                 </div>
@@ -594,8 +592,8 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
           {/* HISTOGRAM BAR CHART */}
           <div className="lg:col-span-2 glass-panel p-6 rounded-3xl h-[310px] flex flex-col">
             <div>
-              <h3 className="font-bold text-slate-800">Spectral Histogram Distribution</h3>
-              <p className="text-xs text-slate-400">Frequency distribution mapping pixel ratios from -1.0 (soil/water) to 1.0 (healthy canopy).</p>
+              <h3 className="font-bold text-slate-800">กราฟฮิสโตแกรมการแจกแจงพิกเซลดัชนีแสงสะท้อน</h3>
+              <p className="text-xs text-slate-400">แผนภูมิแสดงสัดส่วนการกระจายตัวของค่าคะแนนคลอโรฟิลล์พืชตั้งแต่ -1.0 (ดินแห้ง/แหล่งน้ำ) ไปจนถึง 1.0 (พื้นที่พืชใบเขียวหนาแน่น)</p>
             </div>
 
             <div className="flex-1 mt-4 w-full h-[200px]">
@@ -606,18 +604,17 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                     <XAxis 
                       dataKey="bin" 
                       tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 600 }}
-                      label={{ value: 'NDVI Score Bin', position: 'bottom', offset: 0, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
+                      label={{ value: 'ช่วงระดับคะแนนดัชนี NDVI', position: 'bottom', offset: 0, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
                     />
                     <YAxis 
                       tick={{ fontSize: 9, fill: '#94a3b8', fontWeight: 600 }}
-                      label={{ value: 'Pixel Coverage %', angle: -90, position: 'insideLeft', offset: 5, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
+                      label={{ value: 'สัดส่วนพื้นที่พิกเซล (%)', angle: -90, position: 'insideLeft', offset: 5, fontSize: 9, fill: '#94a3b8', fontWeight: 700 }}
                     />
                     <ChartTooltip 
                       contentStyle={{ background: 'rgba(255, 255, 255, 0.95)', borderRadius: '10px', fontSize: 10 }}
                     />
                     <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
                       {currentAnalysis.histogram.map((entry, idx) => {
-                        // Dynamically color histogram bars matching their index values (red for unhealthy, yellow for stressed, green for healthy)
                         let barColor = '#dc2626'; // red
                         if (entry.bin >= 0.0 && entry.bin <= 0.2) barColor = '#f59e0b'; // orange/yellow
                         else if (entry.bin > 0.2 && entry.bin <= 0.5) barColor = '#86efac'; // pale green
@@ -629,7 +626,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-slate-400 text-xs font-bold">
-                  No histogram metrics computed.
+                  ไม่มีข้อมูลกราฟฮิสโตแกรมการแจกแจงพิกเซล
                 </div>
               )}
             </div>
@@ -641,9 +638,9 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
       {/* LAB HISTORICAL CATALOG */}
       <div className="glass-panel rounded-3xl overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-slate-100 bg-white/40 flex justify-between items-center">
-          <h3 className="font-bold text-slate-800 font-sans">Lab Analysis History</h3>
+          <h3 className="font-bold text-slate-800 font-sans">ประวัติการวิเคราะห์ในห้องปฏิบัติการ</h3>
           <span className="text-[10px] text-slate-400 font-extrabold bg-slate-100 px-2 py-0.5 rounded border">
-            {analysisHistory.length} ENTRIES SAVED
+            ลงทะเบียนข้อมูลตรวจวิเคราะห์ไว้ {analysisHistory.length} รายการ
           </span>
         </div>
 
@@ -673,15 +670,15 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
                 <div className="p-3.5 space-y-1">
                   <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase">
                     <span>{hist.date}</span>
-                    <span>ID: #{Math.round(hist.id)}</span>
+                    <span>รหัส: #{Math.round(hist.id)}</span>
                   </div>
                   
                   <h4 className="text-xs font-black text-slate-800 truncate mt-1 group-hover:text-farm-600">
-                    {hist.plot_id ? plots.find(p => p.id === hist.plot_id)?.name : 'Ad-hoc Upload'}
+                    {hist.plot_id ? plots.find(p => p.id === hist.plot_id)?.name : 'อัปโหลดวิเคราะห์ภาพด่วนชั่วคราว'}
                   </h4>
                   
                   <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 mt-2 font-semibold">
-                    <span className="text-slate-500">Average NDVI:</span>
+                    <span className="text-slate-500">ค่าเฉลี่ยดัชนี NDVI:</span>
                     <span className="text-farm-700 font-extrabold">{hist.avg_ndvi}</span>
                   </div>
                 </div>
@@ -689,7 +686,7 @@ export default function NDVIAnalysis({ plots, onRefresh, dbStatus }) {
             ))
           ) : (
             <div className="col-span-full py-6 text-center text-slate-400 font-bold text-xs">
-              No historical lab analyses registered. Run calculation to save results.
+              ยังไม่มีประวัติภาพถ่ายประมวลผลดัชนี NDVI ถูกสร้างบันทึกไว้ในระบบ
             </div>
           )}
         </div>
